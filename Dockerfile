@@ -17,7 +17,8 @@ COPY requirements.txt .
 
 # Install python dependencies
 # We use --no-cache-dir to keep the image small
-RUN pip install --no-cache-dir -r requirements.txt
+# Increased timeout for large packages like torch
+RUN pip install --no-cache-dir --default-timeout=1000 -r requirements.txt
 
 # Copy the rest of the application code
 COPY . .

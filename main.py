@@ -33,8 +33,13 @@ async def read_index():
     return FileResponse(os.path.join(frontend_path, "index.html"))
 
 # Initialize Detector
-# Path is relative to where uvicorn is run (root of project)
-MODEL_PATH = os.path.abspath("../runs/detect/train2/weights/best.pt")
+# Path is relative to the root (where main.py is)
+MODEL_PATH = os.path.join(os.path.dirname(__file__), "runs", "detect", "train2", "weights", "best.pt")
+
+# Verify model exists before loading
+if not os.path.exists(MODEL_PATH):
+    print(f"WARNING: Model not found at {MODEL_PATH}. Check file structure.")
+
 detector = SignDetector(MODEL_PATH)
 
 def generate_frames():
@@ -127,4 +132,6 @@ async def health_check():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    # Use PORT environment variable if available (Render/Heroku compatible)
+    port = int(os.environ.get("PORT", 8001))
+    uvicorn.run(app, host="0.0.0.0", port=port)
