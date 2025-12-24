@@ -1,0 +1,10 @@
+pandas
+Pillow
+opencv-python
+ultralytics
+ipython
+numpy
+matplotlib
+seaborn
+tqdm
+PyYAML
