@@ -133,5 +133,5 @@ async def health_check():
 if __name__ == "__main__":
     import uvicorn
     # Use PORT environment variable if available (Render/Heroku compatible)
-    port = int(os.environ.get("PORT", 8001))
+    port = int(os.environ.get("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
