@@ -129,20 +129,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Draw video frame to hidden capture canvas
         if (videoElement.readyState === videoElement.HAVE_ENOUGH_DATA) {
-            captureCanvas.width = videoElement.videoWidth;
-            captureCanvas.height = videoElement.videoHeight;
-            captureCtx.drawImage(videoElement, 0, 0);
+            // Downscale for performance (Max width 640px)
+            const MAX_WIDTH = 640;
+            const scale = Math.min(1, MAX_WIDTH / videoElement.videoWidth);
 
-            // Convert to JPEG blob and send
+            captureCanvas.width = videoElement.videoWidth * scale;
+            captureCanvas.height = videoElement.videoHeight * scale;
+
+            captureCtx.drawImage(videoElement, 0, 0, captureCanvas.width, captureCanvas.height);
+
+            // Convert to JPEG blob and send (lower quality for speed)
             captureCanvas.toBlob((blob) => {
                 if (state.socket.readyState === WebSocket.OPEN && blob) {
                     state.socket.send(blob);
                 }
-            }, 'image/jpeg', 0.8); // 0.8 Quality
+            }, 'image/jpeg', 0.6); // Reduced quality to 0.6
         }
 
-        // Throttle to ~30 FPS
-        setTimeout(sendFrameLoop, 33);
+        // Throttle to ~10 FPS (100ms) to reduce backend load
+        setTimeout(sendFrameLoop, 100);
     }
 
     function stopCamera() {
@@ -176,12 +181,23 @@ document.addEventListener('DOMContentLoaded', () => {
         const formData = new FormData();
         formData.append('file', file);
 
-        // Show loading state (optional: add spinner)
+        // Show loading state
         imageDropZone.style.display = 'none';
         imageResult.style.display = 'flex';
-        // Force display block to ensure visibility
-        processedImage.style.display = 'block';
-        processedImage.src = ''; // Clear prev
+
+        // Add spinner if not exists
+        let spinner = imageResult.querySelector('.loading-spinner');
+        if (!spinner) {
+            spinner = document.createElement('div');
+            spinner.className = 'loading-spinner';
+            imageResult.querySelector('.image-wrapper').appendChild(spinner);
+        }
+        spinner.style.display = 'block';
+
+        // Prepare image
+        processedImage.src = '';
+        processedImage.classList.remove('loaded');
+        processedImage.style.opacity = '0';
 
         try {
             const response = await fetch('/detect_image', {
@@ -192,7 +208,15 @@ document.addEventListener('DOMContentLoaded', () => {
             if (response.ok) {
                 const blob = await response.blob();
                 const url = URL.createObjectURL(blob);
+
+                // Hide spinner when image loads
+                processedImage.onload = () => {
+                    spinner.style.display = 'none';
+                    processedImage.classList.add('loaded');
+                    processedImage.style.opacity = '1';
+                };
                 processedImage.src = url;
+
             } else {
                 alert('Error processing image');
                 resetImageUpload();
@@ -209,6 +233,10 @@ document.addEventListener('DOMContentLoaded', () => {
         imageResult.style.display = 'none';
         imageInput.value = '';
         processedImage.src = '';
+        processedImage.classList.remove('loaded');
+        processedImage.style.opacity = '0';
+        const spinner = imageResult.querySelector('.loading-spinner');
+        if (spinner) spinner.style.display = 'none';
     };
 
     // --- Video Upload Logic ---

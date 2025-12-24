@@ -391,6 +391,48 @@ footer {
     padding: 1rem;
 }
 
+/* Loading State for Images */
+.image-wrapper {
+    position: relative;
+    min-height: 200px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.image-wrapper img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    /* Hide until loaded to prevent broken icon */
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.image-wrapper img.loaded {
+    opacity: 1;
+}
+
+.loading-spinner {
+    position: absolute;
+    width: 40px;
+    height: 40px;
+    border: 3px solid rgba(255, 255, 255, 0.1);
+    border-radius: 50%;
+    border-top-color: var(--primary);
+    animation: spin 1s ease-in-out infinite;
+    z-index: 10;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
 /* Mobile Responsiveness */
 @media (max-width: 768px) {
     .app-container {
@@ -432,4 +474,27 @@ footer {
     .image-wrapper img {
         max-height: 300px;
     }
+}
+
+.spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid rgba(99, 102, 241, 0.3);
+    border-radius: 50%;
+    border-top-color: var(--primary);
+    animation: spin 1s ease-in-out infinite;
+    position: absolute;
+    z-index: 10;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.image-wrapper {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 12px;
+    overflow: hidden;
 }
