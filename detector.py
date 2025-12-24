@@ -51,6 +51,13 @@ class SignDetector:
             if not success:
                 break
             
+            # Resize frame for faster processing (standard 640px width)
+            height, width = frame.shape[:2]
+            if width > 640:
+                scale = 640 / width
+                new_height = int(height * scale)
+                frame = cv2.resize(frame, (640, new_height))
+
             # Predict
             annotated_frame = self.predict(frame)
             

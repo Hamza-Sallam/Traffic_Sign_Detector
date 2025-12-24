@@ -253,9 +253,39 @@ document.addEventListener('DOMContentLoaded', () => {
         const formData = new FormData();
         formData.append('file', file);
 
+        // Show loading state
         videoDropZone.style.display = 'none';
         videoResult.style.display = 'flex';
+
+        // Add spinner if not exists
+        let spinner = videoResult.querySelector('.loading-spinner');
+        if (!spinner) {
+            spinner = document.createElement('div');
+            spinner.className = 'loading-spinner';
+            // Append to a relative container - we might need to wrap the video element or append to videoResult
+            // Let's create a wrapper if it doesn't exist to center the spinner
+            if (!videoResult.querySelector('.video-wrapper')) {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'video-wrapper';
+                wrapper.style.position = 'relative';
+                wrapper.style.width = '100%';
+                wrapper.style.minHeight = '300px';
+                wrapper.style.display = 'flex';
+                wrapper.style.justifyContent = 'center';
+                wrapper.style.alignItems = 'center';
+                wrapper.style.background = 'rgba(255, 255, 255, 0.05)';
+                wrapper.style.borderRadius = '12px';
+
+                // Move video element into wrapper
+                processedVideoFeed.parentNode.insertBefore(wrapper, processedVideoFeed);
+                wrapper.appendChild(processedVideoFeed);
+            }
+            videoResult.querySelector('.video-wrapper').appendChild(spinner);
+        }
+        spinner.style.display = 'block';
+
         processedVideoFeed.src = '';
+        processedVideoFeed.style.opacity = '0';
 
         try {
             const response = await fetch('/upload_video', {
@@ -266,6 +296,18 @@ document.addEventListener('DOMContentLoaded', () => {
             if (response.ok) {
                 const data = await response.json();
                 const videoId = data.video_id;
+
+                // Hide spinner when video starts loading/playing
+                processedVideoFeed.onload = () => { // For MJPEG stream, onload might fire when connection opens here
+                    spinner.style.display = 'none';
+                    processedVideoFeed.style.opacity = '1';
+                };
+                // Fallback if onload doesn't trigger well for stream
+                setTimeout(() => {
+                    spinner.style.display = 'none';
+                    processedVideoFeed.style.opacity = '1';
+                }, 1000);
+
                 // Start streaming the processed video
                 processedVideoFeed.src = `/stream_video/${videoId}`;
             } else {
@@ -284,6 +326,9 @@ document.addEventListener('DOMContentLoaded', () => {
         videoResult.style.display = 'none';
         videoInput.value = '';
         processedVideoFeed.src = '';
+        processedVideoFeed.style.opacity = '0';
+        const spinner = videoResult.querySelector('.loading-spinner');
+        if (spinner) spinner.style.display = 'none';
     };
 
     // --- Utility ---
