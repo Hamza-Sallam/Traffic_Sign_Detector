@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.env
+.venv
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Jupyter Notebooks
+.ipynb_checkpoints
+advanced-traffic-sign-detection-using-yolov11.ipynb
+
+# Project specific
+runs.zip
+.gradio
+req.txt
+uploads/
+
+# OS specific
+.DS_Store
+
+# Vercel
+.vercel
