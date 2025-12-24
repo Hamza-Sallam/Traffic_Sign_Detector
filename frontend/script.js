@@ -2,7 +2,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- State ---
     const state = {
         activeTab: 'live',
-        isCameraActive: false
+        isCameraActive: false,
+        socket: null,
+        animationId: null
     };
 
     // --- Elements ---
@@ -13,8 +15,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // Live Feed Elements
     const enableCameraBtn = document.getElementById('enable-camera-btn');
     const cameraPlaceholder = document.getElementById('camera-placeholder');
-    const videoFeed = document.getElementById('video-feed');
+    const videoElement = document.getElementById('webcam-video');
+    const canvasElement = document.getElementById('output-canvas'); // Displays result
     const liveIndicator = document.getElementById('live-indicator');
+
+    // Hidden canvas for capturing frame to send
+    const captureCanvas = document.createElement('canvas');
+    const captureCtx = captureCanvas.getContext('2d');
 
     // Image Upload Elements
     const imageDropZone = document.getElementById('image-drop-zone');
@@ -50,23 +57,107 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // --- Live Feed Logic ---
+    // --- Live Feed Logic (WebSocket) ---
     enableCameraBtn.addEventListener('click', () => {
         startCamera();
     });
 
-    function startCamera() {
-        state.isCameraActive = true;
-        cameraPlaceholder.style.display = 'none';
-        videoFeed.style.display = 'block';
-        liveIndicator.style.display = 'block';
-        videoFeed.src = '/video_feed'; // Start stream
+    async function startCamera() {
+        try {
+            // Get camera stream (force back camera on phones if available)
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: 'environment' }
+            });
+
+            videoElement.srcObject = stream;
+
+            await videoElement.play();
+
+            // Connect WebSocket
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws/detect`;
+            state.socket = new WebSocket(wsUrl);
+
+            state.socket.onopen = () => {
+                console.log("WebSocket Connected");
+                state.isCameraActive = true;
+
+                // UI Updates
+                cameraPlaceholder.style.display = 'none';
+                canvasElement.style.display = 'block';
+                liveIndicator.style.display = 'block';
+
+                // Start sending frames
+                sendFrameLoop();
+            };
+
+            state.socket.onmessage = (event) => {
+                // Receive processed frame blob
+                const blob = event.data;
+                const url = URL.createObjectURL(blob);
+
+                const img = new Image();
+                img.onload = () => {
+                    const ctx = canvasElement.getContext('2d');
+                    // Resize canvas to match image
+                    canvasElement.width = img.width;
+                    canvasElement.height = img.height;
+                    ctx.drawImage(img, 0, 0);
+                    URL.revokeObjectURL(url);
+                };
+                img.src = url;
+            };
+
+            state.socket.onerror = (err) => {
+                console.error("WebSocket Error:", err);
+                stopCamera();
+            };
+
+            state.socket.onclose = () => {
+                console.log("WebSocket Disconnected");
+                stopCamera();
+            };
+
+        } catch (err) {
+            console.error("Camera access denied:", err);
+            alert("Could not access camera. Please allow permission.");
+        }
+    }
+
+    function sendFrameLoop() {
+        if (!state.isCameraActive || !state.socket || state.socket.readyState !== WebSocket.OPEN) return;
+
+        // Draw video frame to hidden capture canvas
+        if (videoElement.readyState === videoElement.HAVE_ENOUGH_DATA) {
+            captureCanvas.width = videoElement.videoWidth;
+            captureCanvas.height = videoElement.videoHeight;
+            captureCtx.drawImage(videoElement, 0, 0);
+
+            // Convert to JPEG blob and send
+            captureCanvas.toBlob((blob) => {
+                if (state.socket.readyState === WebSocket.OPEN && blob) {
+                    state.socket.send(blob);
+                }
+            }, 'image/jpeg', 0.8); // 0.8 Quality
+        }
+
+        // Throttle to ~30 FPS
+        setTimeout(sendFrameLoop, 33);
     }
 
     function stopCamera() {
         state.isCameraActive = false;
-        videoFeed.src = '';
-        videoFeed.style.display = 'none';
+
+        if (state.socket) {
+            state.socket.close();
+        }
+
+        if (videoElement.srcObject) {
+            videoElement.srcObject.getTracks().forEach(track => track.stop());
+            videoElement.srcObject = null;
+        }
+
+        canvasElement.style.display = 'none';
         liveIndicator.style.display = 'none';
         cameraPlaceholder.style.display = 'flex';
     }
@@ -88,6 +179,8 @@ document.addEventListener('DOMContentLoaded', () => {
         // Show loading state (optional: add spinner)
         imageDropZone.style.display = 'none';
         imageResult.style.display = 'flex';
+        // Force display block to ensure visibility
+        processedImage.style.display = 'block';
         processedImage.src = ''; // Clear prev
 
         try {
@@ -115,6 +208,7 @@ document.addEventListener('DOMContentLoaded', () => {
         imageDropZone.style.display = 'block';
         imageResult.style.display = 'none';
         imageInput.value = '';
+        processedImage.src = '';
     };
 
     // --- Video Upload Logic ---

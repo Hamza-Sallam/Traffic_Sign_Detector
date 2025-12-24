@@ -1,13 +1,14 @@
 # Use an official lightweight Python image.
-# 3.9-slim is a good balance between size and compatibility.
-FROM python:3.9-slim
+# Pinning to bookworm ensures stable package names
+FROM python:3.9-slim-bookworm
 
 # Set working directory to /app
 WORKDIR /app
 
 # Install system dependencies required for OpenCV
+# libgl1 is the modern replacement for libgl1-mesa-glx in Debian Bookworm+
 RUN apt-get update && apt-get install -y \
-    libgl1-mesa-glx \
+    libgl1 \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
@@ -25,5 +26,5 @@ COPY . .
 EXPOSE 8000
 
 # Command to run the application
-# We use the absolute path to backend.main to be safe
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Now main.py is in the root
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

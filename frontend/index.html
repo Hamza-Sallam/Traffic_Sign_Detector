@@ -87,8 +87,11 @@
                         </button>
                     </div>
 
-                    <img src="" alt="Live Detection Feed" id="video-feed" style="display: none;"
-                        onerror="this.style.display='none'; document.getElementById('camera-placeholder').style.display='flex'">
+                    <!-- Hidden Video for Capture -->
+                    <video id="webcam-video" autoplay playsinline muted style="display: none;"></video>
+                    <!-- Canvas for Rendering -->
+                    <canvas id="output-canvas"
+                        style="display: none; width: 100%; height: 100%; object-fit: contain;"></canvas>
                 </div>
             </div>
 
@@ -110,10 +113,11 @@
                         <span class="sub-text">Supported formats: JPG, PNG, WEBP</span>
                     </div>
 
-                    <div class="result-display" id="image-result" style="display: none;">
+                    <div class="result-display" id="image-result" style="display: none; width: 100%;">
                         <h3>Detection Result</h3>
-                        <div class="image-wrapper">
-                            <img id="processed-image" alt="Processed Image">
+                        <div class="image-wrapper" style="width: 100%; display: flex; justify-content: center;">
+                            <img id="processed-image" alt="Processed Image"
+                                style="max-width: 100%; height: auto; display: block;">
                         </div>
                         <button class="secondary-btn" onclick="resetImageUpload()">Upload Another</button>
                     </div>
