@@ -4,7 +4,8 @@ document.addEventListener('DOMContentLoaded', () => {
         activeTab: 'live',
         isCameraActive: false,
         socket: null,
-        animationId: null
+        animationId: null,
+        inFlight: false
     };
 
     // --- Elements ---
@@ -66,7 +67,12 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             // Get camera stream (force back camera on phones if available)
             const stream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: 'environment' }
+                video: {
+                    facingMode: 'environment',
+                    width: { ideal: 480 },
+                    height: { ideal: 270 },
+                    frameRate: { ideal: 60, max: 60 }
+                }
             });
 
             videoElement.srcObject = stream;
@@ -77,6 +83,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const wsUrl = `${protocol}//${window.location.host}/ws/detect`;
             state.socket = new WebSocket(wsUrl);
+            state.socket.binaryType = 'blob';
 
             state.socket.onopen = () => {
                 console.log("WebSocket Connected");
@@ -87,8 +94,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 canvasElement.style.display = 'block';
                 liveIndicator.style.display = 'block';
 
-                // Start sending frames
-                sendFrameLoop();
+                state.inFlight = false;
+                scheduleNextFrame();
             };
 
             state.socket.onmessage = (event) => {
@@ -106,6 +113,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     URL.revokeObjectURL(url);
                 };
                 img.src = url;
+                state.inFlight = false;
+                scheduleNextFrame();
             };
 
             state.socket.onerror = (err) => {
@@ -124,34 +133,52 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function sendFrameLoop() {
+    function scheduleNextFrame() {
+        if (!state.isCameraActive) return;
+        setTimeout(sendFrameOnce, 0);
+    }
+
+    const SEND_EVERY_N = 4;
+
+    function sendFrameOnce() {
         if (!state.isCameraActive || !state.socket || state.socket.readyState !== WebSocket.OPEN) return;
+        if (state.inFlight) return;
 
-        // Draw video frame to hidden capture canvas
-        if (videoElement.readyState === videoElement.HAVE_ENOUGH_DATA) {
-            // Downscale for performance (Max width 640px)
-            const MAX_WIDTH = 640;
-            const scale = Math.min(1, MAX_WIDTH / videoElement.videoWidth);
-
-            captureCanvas.width = videoElement.videoWidth * scale;
-            captureCanvas.height = videoElement.videoHeight * scale;
-
-            captureCtx.drawImage(videoElement, 0, 0, captureCanvas.width, captureCanvas.height);
-
-            // Convert to JPEG blob and send (lower quality for speed)
-            captureCanvas.toBlob((blob) => {
-                if (state.socket.readyState === WebSocket.OPEN && blob) {
-                    state.socket.send(blob);
-                }
-            }, 'image/jpeg', 0.6); // Reduced quality to 0.6
+        if (videoElement.readyState !== videoElement.HAVE_ENOUGH_DATA) {
+            scheduleNextFrame();
+            return;
         }
 
-        // Throttle to ~10 FPS (100ms) to reduce backend load
-        setTimeout(sendFrameLoop, 100);
+        state.frameCount = (state.frameCount || 0) + 1;
+        if (state.frameCount % SEND_EVERY_N !== 0) {
+            scheduleNextFrame();
+            return;
+        }
+
+        // Downscale for performance (smaller width = faster inference)
+        const MAX_WIDTH = 256;
+        const scale = Math.min(1, MAX_WIDTH / videoElement.videoWidth);
+
+        captureCanvas.width = Math.round(videoElement.videoWidth * scale);
+        captureCanvas.height = Math.round(videoElement.videoHeight * scale);
+
+        captureCtx.drawImage(videoElement, 0, 0, captureCanvas.width, captureCanvas.height);
+
+        state.inFlight = true;
+        captureCanvas.toBlob((blob) => {
+            if (state.socket && state.socket.readyState === WebSocket.OPEN && blob) {
+                state.socket.send(blob);
+            } else {
+                state.inFlight = false;
+                scheduleNextFrame();
+            }
+        }, 'image/jpeg', 0.3);
     }
 
     function stopCamera() {
         state.isCameraActive = false;
+        state.inFlight = false;
+        state.frameCount = 0;
 
         if (state.socket) {
             state.socket.close();
@@ -262,25 +289,18 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!spinner) {
             spinner = document.createElement('div');
             spinner.className = 'loading-spinner';
-            // Append to a relative container - we might need to wrap the video element or append to videoResult
-            // Let's create a wrapper if it doesn't exist to center the spinner
-            if (!videoResult.querySelector('.video-wrapper')) {
-                const wrapper = document.createElement('div');
-                wrapper.className = 'video-wrapper';
-                wrapper.style.position = 'relative';
-                wrapper.style.width = '100%';
-                wrapper.style.minHeight = '300px';
-                wrapper.style.display = 'flex';
-                wrapper.style.justifyContent = 'center';
-                wrapper.style.alignItems = 'center';
-                wrapper.style.background = 'rgba(255, 255, 255, 0.05)';
-                wrapper.style.borderRadius = '12px';
 
-                // Move video element into wrapper
-                processedVideoFeed.parentNode.insertBefore(wrapper, processedVideoFeed);
-                wrapper.appendChild(processedVideoFeed);
-            }
-            videoResult.querySelector('.video-wrapper').appendChild(spinner);
+            const wrapper = processedVideoFeed.parentNode;
+            wrapper.classList.add('video-wrapper');
+            wrapper.style.position = 'relative';
+            wrapper.style.width = '100%';
+            wrapper.style.minHeight = '520px';
+            wrapper.style.display = 'flex';
+            wrapper.style.justifyContent = 'center';
+            wrapper.style.alignItems = 'center';
+            wrapper.style.background = 'rgba(255, 255, 255, 0.05)';
+            wrapper.style.borderRadius = '12px';
+            wrapper.appendChild(spinner);
         }
         spinner.style.display = 'block';
 
@@ -297,18 +317,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 const data = await response.json();
                 const videoId = data.video_id;
 
-                // Hide spinner when video starts loading/playing
-                processedVideoFeed.onload = () => { // For MJPEG stream, onload might fire when connection opens here
+                processedVideoFeed.onload = () => {
                     spinner.style.display = 'none';
                     processedVideoFeed.style.opacity = '1';
                 };
-                // Fallback if onload doesn't trigger well for stream
                 setTimeout(() => {
                     spinner.style.display = 'none';
                     processedVideoFeed.style.opacity = '1';
                 }, 1000);
 
-                // Start streaming the processed video
                 processedVideoFeed.src = `/stream_video/${videoId}`;
             } else {
                 alert('Error uploading video');

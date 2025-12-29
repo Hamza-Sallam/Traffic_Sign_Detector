@@ -40,7 +40,7 @@ body {
 }
 
 .app-container {
-    max-width: 1000px;
+    max-width: 1600px;
     width: 100%;
     padding: 2rem;
     display: flex;
@@ -190,7 +190,9 @@ main {
 
 /* Video Card Styles */
 .video-card {
-    height: 500px;
+    height: 820px;
+    width: 100%;
+    max-width: 100%;
     background: #000;
     border-radius: 20px;
     overflow: hidden;
@@ -203,9 +205,11 @@ main {
 }
 
 .video-player-wrapper {
+    width: 100%;
     height: auto;
-    min-height: 400px;
-    max-height: 80vh;
+    min-height: 720px;
+    max-height: 94vh;
+    max-width: 100%;
 }
 
 #video-feed,
@@ -352,6 +356,7 @@ main {
     align-items: center;
     gap: 1.5rem;
     animation: fadeIn 0.4s ease;
+    width: 100%;
 }
 
 .image-wrapper {

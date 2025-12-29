@@ -84,11 +84,8 @@ async def websocket_endpoint(websocket: WebSocket):
             
             # Predict
             if img is not None:
-                annotated_frame = detector.predict(img)
-                
-                # Encode and send back
-                ret, buffer = cv2.imencode('.jpg', annotated_frame)
-                await websocket.send_bytes(buffer.tobytes())
+                frame_bytes = detector.get_stream_frame(img)
+                await websocket.send_bytes(frame_bytes)
                 
     except WebSocketDisconnect:
         print("Client disconnected")
@@ -123,8 +120,17 @@ async def stream_video(video_id: str):
     video_path = os.path.join(UPLOAD_DIR, video_id)
     if not os.path.exists(video_path):
         raise HTTPException(status_code=404, detail="Video not found")
-        
-    return StreamingResponse(detector.process_video_file(video_path), media_type="multipart/x-mixed-replace; boundary=frame")
+
+    def stream_and_cleanup():
+        try:
+            yield from detector.process_video_file(video_path)
+        finally:
+            try:
+                os.remove(video_path)
+            except OSError:
+                pass
+
+    return StreamingResponse(stream_and_cleanup(), media_type="multipart/x-mixed-replace; boundary=frame")
 
 @app.get("/health")
 async def health_check():
@@ -134,4 +140,4 @@ if __name__ == "__main__":
     import uvicorn
     # Use PORT environment variable if available (Render/Heroku compatible)
     port = int(os.environ.get("PORT", 8000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    uvicorn.run("main:app", host="0.0.0.0", port=port,reload=True)
