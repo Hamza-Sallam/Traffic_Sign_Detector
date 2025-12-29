@@ -10,7 +10,8 @@ venv/
 .venv
 pip-log.txt
 pip-delete-this-directory.txt
-
+.mp4
+.webp
 # Jupyter Notebooks
 .ipynb_checkpoints
 advanced-traffic-sign-detection-using-yolov11.ipynb
