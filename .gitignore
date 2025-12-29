@@ -21,7 +21,6 @@ runs.zip
 .gradio
 req.txt
 uploads/
-.ipynb
 # OS specific
 .DS_Store
 
