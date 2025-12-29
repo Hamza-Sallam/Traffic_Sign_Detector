@@ -19,6 +19,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const videoElement = document.getElementById('webcam-video');
     const canvasElement = document.getElementById('output-canvas'); // Displays result
     const liveIndicator = document.getElementById('live-indicator');
+    const fpsIndicator = document.getElementById('fps-indicator');
+    const resIndicator = document.getElementById('res-indicator');
+    const confSlider = document.getElementById('conf-slider');
+    const confValue = document.getElementById('conf-value');
 
     // Hidden canvas for capturing frame to send
     const captureCanvas = document.createElement('canvas');
@@ -58,26 +62,70 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    function setResolutionLabel() {
+        if (!resIndicator || !videoElement.videoWidth || !videoElement.videoHeight) return;
+        resIndicator.textContent = `${videoElement.videoWidth}x${videoElement.videoHeight}`;
+    }
+
+    function resetTelemetry() {
+        if (fpsIndicator) fpsIndicator.textContent = '-';
+        if (resIndicator) resIndicator.textContent = '-';
+        state.lastFrameTs = null;
+        state.fps = 0;
+        state.gotFirstFrame = false;
+    }
+
+    function syncConfidenceLabel(value) {
+        if (confValue) confValue.textContent = Number(value).toFixed(2);
+    }
+
+    function sendConfidence(value) {
+        fetch('/config/conf', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ conf: value })
+        }).catch(() => {});
+    }
+
+    function setupConfidenceControl() {
+        if (!confSlider) return;
+        let debounceId;
+        syncConfidenceLabel(confSlider.value);
+        confSlider.addEventListener('input', () => {
+            syncConfidenceLabel(confSlider.value);
+            clearTimeout(debounceId);
+            debounceId = setTimeout(() => sendConfidence(Number(confSlider.value)), 200);
+        });
+    }
+
     // --- Live Feed Logic (WebSocket) ---
     enableCameraBtn.addEventListener('click', () => {
         startCamera();
     });
 
+    setupConfidenceControl();
+
     async function startCamera() {
         try {
+            resetTelemetry();
             // Get camera stream (force back camera on phones if available)
             const stream = await navigator.mediaDevices.getUserMedia({
                 video: {
                     facingMode: 'environment',
-                    width: { ideal: 480 },
-                    height: { ideal: 270 },
-                    frameRate: { ideal: 60, max: 60 }
+                    width: { ideal: 1920 },
+                    height: { ideal: 1080 },
+                    frameRate: { ideal: 60, max: 120 }
                 }
             });
 
             videoElement.srcObject = stream;
 
+            videoElement.addEventListener('loadedmetadata', () => {
+                setResolutionLabel();
+            }, { once: true });
+
             await videoElement.play();
+            setResolutionLabel();
 
             // Connect WebSocket
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -111,6 +159,19 @@ document.addEventListener('DOMContentLoaded', () => {
                     canvasElement.height = img.height;
                     ctx.drawImage(img, 0, 0);
                     URL.revokeObjectURL(url);
+
+                    const now = performance.now();
+                    if (state.lastFrameTs) {
+                        const instantFps = 1000 / (now - state.lastFrameTs);
+                        state.fps = state.fps ? (state.fps * 0.9 + instantFps * 0.1) : instantFps;
+                        if (fpsIndicator) {
+                            fpsIndicator.textContent = state.fps.toFixed(1);
+                        }
+                    }
+                    state.lastFrameTs = now;
+                    if (!state.gotFirstFrame) {
+                        state.gotFirstFrame = true;
+                    }
                 };
                 img.src = url;
                 state.inFlight = false;
@@ -138,7 +199,7 @@ document.addEventListener('DOMContentLoaded', () => {
         setTimeout(sendFrameOnce, 0);
     }
 
-    const SEND_EVERY_N = 4;
+    const SEND_EVERY_N = 1;
 
     function sendFrameOnce() {
         if (!state.isCameraActive || !state.socket || state.socket.readyState !== WebSocket.OPEN) return;
@@ -155,12 +216,9 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // Downscale for performance (smaller width = faster inference)
-        const MAX_WIDTH = 256;
-        const scale = Math.min(1, MAX_WIDTH / videoElement.videoWidth);
-
-        captureCanvas.width = Math.round(videoElement.videoWidth * scale);
-        captureCanvas.height = Math.round(videoElement.videoHeight * scale);
+        // Capture at full resolution for maximum quality
+        captureCanvas.width = videoElement.videoWidth;
+        captureCanvas.height = videoElement.videoHeight;
 
         captureCtx.drawImage(videoElement, 0, 0, captureCanvas.width, captureCanvas.height);
 
@@ -172,7 +230,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 state.inFlight = false;
                 scheduleNextFrame();
             }
-        }, 'image/jpeg', 0.3);
+        }, 'image/jpeg', 0.95);
     }
 
     function stopCamera() {
@@ -192,6 +250,7 @@ document.addEventListener('DOMContentLoaded', () => {
         canvasElement.style.display = 'none';
         liveIndicator.style.display = 'none';
         cameraPlaceholder.style.display = 'flex';
+        resetTelemetry();
     }
 
     // --- Image Upload Logic ---
@@ -381,7 +440,7 @@ document.addEventListener('DOMContentLoaded', () => {
         fetch('/health')
             .then(response => {
                 if (response.ok) {
-                    statusBadge.innerHTML = '<span class="dot"></span> System Active';
+                    // statusBadge.innerHTML = '<span class="dot"></span> System Active';
                     statusBadge.style.color = 'var(--success)';
                     statusBadge.style.background = 'rgba(16, 185, 129, 0.1)';
                     statusBadge.querySelector('.dot').style.backgroundColor = 'var(--success)';

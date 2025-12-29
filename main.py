@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Body
 from fastapi.responses import StreamingResponse, FileResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 import cv2
@@ -91,6 +91,11 @@ async def websocket_endpoint(websocket: WebSocket):
         print("Client disconnected")
     except Exception as e:
         print(f"Error: {e}")
+
+@app.post("/config/conf")
+async def update_conf(conf: float = Body(..., embed=True)):
+    detector.conf = max(0.01, min(0.99, float(conf)))
+    return {"conf": detector.conf}
 
 @app.post("/detect_image")
 async def detect_image(file: UploadFile = File(...)):

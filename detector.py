@@ -20,10 +20,11 @@ class SignDetector:
             print("⚠️ Using CPU (Performance might be slow on Windows/Intel)")
             
         self.model.to(self.device)
-        self.imgsz = 256
-        self.conf = 0.25
+        self.imgsz = 640
+        self.conf = 0.45
         self.use_half = self.device == 'cuda'
-        self.video_stream_width = 1280
+        self.video_stream_width = 1920
+        self.video_imgsz = 512
         print("Model loaded successfully.")
 
     def predict(self, frame):
@@ -38,7 +39,6 @@ class SignDetector:
             half=self.use_half,
             verbose=False,
         )
-        
         # Plot results on the frame
         annotated_frame = results[0].plot()
         
@@ -49,7 +49,7 @@ class SignDetector:
         annotated_frame = self.predict(frame)
         
         # Encode as JPEG
-        ret, buffer = cv2.imencode('.jpg', annotated_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 40])
+        ret, buffer = cv2.imencode('.jpg', annotated_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
         return buffer.tobytes()
 
     def get_detections(self, frame):
@@ -99,11 +99,19 @@ class SignDetector:
                 new_height = int(height * scale)
                 frame = cv2.resize(frame, (target_width, new_height))
 
-            # Predict
-            annotated_frame = self.predict(frame)
+            # Predict (use smaller size for smoother playback)
+            results = self.model.predict(
+                frame,
+                imgsz=self.video_imgsz,
+                conf=self.conf,
+                device=self.device,
+                half=self.use_half,
+                verbose=False,
+            )
+            annotated_frame = results[0].plot()
             
             # Encode
-            ret, buffer = cv2.imencode('.jpg', annotated_frame)
+            ret, buffer = cv2.imencode('.jpg', annotated_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
             if not ret:
                 continue
                 
